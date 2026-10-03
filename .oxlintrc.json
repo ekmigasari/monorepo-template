@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "overrides": [
+    {
+      "files": ["apps/platform/src/routes/profile.tsx", "packages/ui/src/hooks/use-mobile.ts"],
+      "rules": {
+        "react/set-state-in-effect": "off"
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.turbo/**",
+    "**/.tanstack/**",
+    "**/routeTree.gen.ts",
+    "packages/ui/src/components/**"
+  ]
+}

@@ -4,7 +4,6 @@ pnpm workspace with:
 
 - `apps/api`: Hono API on Node.js.
 - `apps/platform`: React + Vite + TanStack Router file routes + TanStack Query.
-- `apps/admin`: React + Vite + TanStack Router file routes + TanStack Query.
 - `packages/api-client`: typed Hono RPC client shared by the frontend apps.
 - `packages/logger`: Pino logging and OpenTelemetry setup for server applications.
 - `packages/storage`: S3-compatible object storage primitives.
@@ -28,7 +27,6 @@ pnpm db:migrate
 ```sh
 pnpm --filter @repo/api dev
 pnpm --filter @repo/platform dev
-pnpm --filter @repo/admin dev
 pnpm --filter @repo/worker dev
 ```
 
@@ -38,9 +36,15 @@ pnpm --filter @repo/worker dev
 pnpm test
 ```
 
-This runs the base Vitest suites for API, Platform, Admin, and Worker.
+This runs the Vitest suites for API, Platform, and Worker.
 
 The API database integration tests use an in-memory PostgreSQL instance through PGlite; they do not connect to the configured database.
+
+## Linting and formatting
+
+Oxlint and Oxfmt are installed at the workspace root. Run both checks with `pnpm check`, lint with `pnpm lint`, and format with `pnpm format`. `pnpm check:fix` applies lint fixes and formatting, while `pnpm format:check` checks formatting without writing files.
+
+Generated files and database migration artifacts are excluded from formatting. The shared UI component library retains its existing lint exclusion. The existing profile editor and mobile hook opt out of `react/set-state-in-effect` while other React checks remain enabled.
 
 ## Database
 
@@ -179,7 +183,7 @@ The production Compose file builds only the API application and its Postgres dat
 
 The API container runs Drizzle migrations with `pnpm db:deploy` on startup. For an existing database, follow the baseline procedure above before starting the container.
 
-For local development, `docker-compose.dev.yaml` still provides Postgres and Redis while the API, worker, and frontends run directly through pnpm:
+For local development, `docker-compose.dev.yaml` still provides Postgres and Redis while the API, worker, and platform run directly through pnpm:
 
 - API health: `http://localhost:8000/health`
 - Postgres with `docker-compose.dev.yaml`: `localhost:15432`
@@ -187,7 +191,7 @@ For local development, `docker-compose.dev.yaml` still provides Postgres and Red
 
 ## Cloudflare frontend deployment
 
-Admin and Platform deploy as separate Cloudflare Workers with static assets. Their Wrangler configurations enable SPA fallback routing and preserve the security and immutable asset-cache headers previously supplied by Caddy.
+Platform deploys as a Cloudflare Worker with static assets. Its Wrangler configuration enables SPA fallback routing and preserves the security and immutable asset-cache headers previously supplied by Caddy.
 
 Authenticate Wrangler once:
 
@@ -195,23 +199,21 @@ Authenticate Wrangler once:
 pnpm --filter @repo/platform exec wrangler login
 ```
 
-Preview either production build through the local Workers runtime:
+Preview the production build through the local Workers runtime:
 
 ```sh
 pnpm --filter @repo/platform preview:cloudflare
-pnpm --filter @repo/admin preview:cloudflare
 ```
 
-Set the public API URL at build time and deploy each frontend:
+Set the public API URL at build time and deploy the frontend:
 
 ```sh
 VITE_API_URL="https://api.example.com" pnpm deploy:platform
-VITE_API_URL="https://api.example.com" pnpm deploy:admin
 ```
 
-The deployments use the Worker names `monorepo-template-platform` and `monorepo-template-admin`. Configure their custom domains in Cloudflare, then allow those origins in the API environment:
+The deployment uses the Worker name `monorepo-template-platform`. Configure its custom domain in Cloudflare, then allow that origin in the API environment:
 
 ```env
 BETTER_AUTH_URL="https://api.example.com"
-CLIENT_ORIGINS="https://app.example.com,https://admin.example.com"
+CLIENT_ORIGINS="https://app.example.com"
 ```

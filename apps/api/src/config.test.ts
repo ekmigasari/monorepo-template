@@ -3,7 +3,7 @@ import { parseApiEnv } from "./config";
 
 const productionEnv = {
   BETTER_AUTH_URL: "http://localhost:8000",
-  CLIENT_ORIGINS: "http://localhost:3000,http://localhost:4000",
+  CLIENT_ORIGINS: "http://localhost:3000",
   DATABASE_URL: "postgresql://postgres:postgres@localhost:15432/monorepo_template?schema=public",
   NODE_ENV: "production",
 } satisfies NodeJS.ProcessEnv;

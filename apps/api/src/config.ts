@@ -4,7 +4,7 @@ import { z } from "zod";
 export type RuntimeEnv = "development" | "test" | "production";
 export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
 
-const defaultClientOrigins = "http://localhost:3000,http://localhost:4000";
+const defaultClientOrigins = "http://localhost:3000";
 const defaultDatabaseUrl =
   "postgresql://postgres:postgres@localhost:15432/monorepo_template?schema=public";
 const defaultBetterAuthUrl = "http://localhost:8000";

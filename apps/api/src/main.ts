@@ -1,9 +1,4 @@
-import { telemetryConfig } from "./config";
-import { startTelemetry } from "@repo/logger/telemetry";
+import { createApiConfig, parseApiEnv } from "./config";
+import { startServer } from "./server";
 
-startTelemetry({
-  config: telemetryConfig,
-  serviceName: "api",
-});
-
-await import("./index");
+startServer(createApiConfig(parseApiEnv(process.env)));

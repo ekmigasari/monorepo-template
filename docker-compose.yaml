@@ -24,19 +24,12 @@ services:
     container_name: monorepo-template-api
     restart: unless-stopped
     environment:
-      NODE_ENV: "${NODE_ENV:-production}"
+      NODE_ENV: "production"
       API_PORT: "8000"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}"
       BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:8000}"
       CLIENT_ORIGINS: "${CLIENT_ORIGINS:-http://localhost:3000}"
-      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/monorepo_template?schema=public}"
-      ENABLE_TELEMETRY: "${ENABLE_TELEMETRY:-false}"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
-      TELEMETRY_API_KEY: "${TELEMETRY_API_KEY:-}"
-      TELEMETRY_API_KEY_HEADER: "${TELEMETRY_API_KEY_HEADER:-authorization}"
-      TELEMETRY_EXPORTER: "${TELEMETRY_EXPORTER:-console}"
-      TELEMETRY_EXPORTER_OTLP_ENDPOINT: "${TELEMETRY_EXPORTER_OTLP_ENDPOINT:-}"
-      TELEMETRY_SERVICE_NAMESPACE: "${TELEMETRY_SERVICE_NAMESPACE:-monorepo-template}"
+      DATABASE_URL: "${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/monorepo_template}"
     ports:
       - "${API_HOST_PORT:-8000}:8000"
     depends_on:

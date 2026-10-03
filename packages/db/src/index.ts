@@ -7,3 +7,8 @@ export function createDatabase(connectionString: string) {
   const db = drizzle({ client: pool, schema });
   return { db, pool };
 }
+
+export type Database = import("drizzle-orm/pg-core").PgDatabase<
+  import("drizzle-orm/pg-core").PgQueryResultHKT,
+  typeof schema
+>;

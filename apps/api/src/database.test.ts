@@ -1,21 +1,22 @@
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { auth } from "./modules/auth/auth";
-import { updateProfile } from "./modules/profile/services";
-import { InvalidUsersCursorError, listRecentUsers } from "./modules/users/services";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createAuth } from "./modules/auth/auth";
+import { createProfileService } from "./modules/profile/services";
+import { InvalidUsersCursorError, createUsersService } from "./modules/users/services";
 import { account, session, user } from "@repo/db/schema";
 
-const { client, db } = await vi.hoisted(async () => {
-  const { PGlite } = await import("@electric-sql/pglite");
-  const { drizzle } = await import("drizzle-orm/pglite");
-  const schema = await import("@repo/db/schema");
-  const client = new PGlite();
-  return { client, db: drizzle({ client, schema }) };
-});
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import * as schema from "@repo/db/schema";
+import { createApiConfig, parseApiEnv } from "./config";
 
-vi.mock("./database", () => ({ db }));
+const client = new PGlite();
+const db = drizzle({ client, schema });
+const auth = createAuth(db, createApiConfig(parseApiEnv({ NODE_ENV: "test" })).auth);
+const { updateProfile } = createProfileService(db);
+const { listRecentUsers } = createUsersService(db);
 
 describe("Drizzle database integration", () => {
   beforeAll(async () => {
@@ -101,7 +102,7 @@ describe("Drizzle database integration", () => {
     expect(first.nextCursor).toBe("user-2");
     expect(second.users.map((user) => user.id)).toEqual(["user-1"]);
     expect(second.nextCursor).toBeNull();
-    await expect(listRecentUsers({ cursor: "missing" })).rejects.toBeInstanceOf(
+    await expect(listRecentUsers({ cursor: "missing", limit: 20 })).rejects.toBeInstanceOf(
       InvalidUsersCursorError,
     );
   });
@@ -118,7 +119,7 @@ describe("Drizzle database integration", () => {
 
     const updated = await updateProfile("profile-user", { name: "Updated" });
     expect(updated.user.image).toBe("https://example.com/avatar.png");
-    expect(updated.user.updatedAt.getTime()).toBeGreaterThan(previousUpdate.getTime());
+    expect(Date.parse(updated.user.updatedAt)).toBeGreaterThan(previousUpdate.getTime());
 
     const cleared = await updateProfile("profile-user", { name: "Updated", image: null });
     expect(cleared.user.image).toBeNull();

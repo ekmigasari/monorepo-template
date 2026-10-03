@@ -1,116 +1,132 @@
 # Monorepo Template
 
-pnpm workspace with:
+A source-only pnpm workspace with three independently runnable applications:
 
-- `apps/api`: Hono API on Node.js.
-- `apps/platform`: React + Vite + TanStack Router file routes + TanStack Query.
-- `packages/api-client`: typed Hono RPC client shared by the frontend apps.
-- `packages/db`: shared Drizzle client factory, PostgreSQL schema, and migrations.
-- `packages/logger`: Pino logging and OpenTelemetry setup for server applications.
-- `packages/storage`: S3-compatible object storage primitives.
-- `packages/ui`: shared shadcn components and frontend i18next setup.
-- `packages/worker`: Redis + BullMQ worker primitives.
+- `apps/api`: Hono API on Node.js, with Better Auth and Drizzle.
+- `apps/web`: React, Vite, TanStack Router, and TanStack Query.
+- `apps/worker`: BullMQ processors and worker lifecycle.
 
-Packages are source-only: they export their `.ts`/`.tsx` files directly and do not have a build step.
-Runtime-specific environment validation lives with the API and worker that consume it.
+Use Node.js 24 or newer and the pnpm version declared in `package.json`.
 
-## Setup
+## Ownership and boundaries
+
+| Package            | Owns                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `@repo/contracts`  | Browser-safe request, response, error, and job schemas; types inferred from those schemas |
+| `@repo/api-client` | Hono RPC client, inferred request/session types, and response handling                    |
+| `@repo/config`     | Shared environment parsing primitives and database URL defaults                           |
+| `@repo/db`         | Drizzle database factory, persistence schema, and committed migrations                    |
+| `@repo/queue`      | Queue producers and connection factories; configuration comes from callers                |
+| `@repo/storage`    | S3-compatible storage factories accepting explicit configuration                          |
+| `@repo/ui`         | Visual components, styles, and presentation controls                                      |
+
+Packages expose source files through their `exports` maps and have no build step. Declare workspace dependencies in each consumer's `package.json`; there are no global TypeScript aliases bypassing package resolution. Repeated third-party dependency versions live in the catalog in `pnpm-workspace.yaml`.
+
+Applications own environment schemas and startup. Library imports do not read environment variables or start application services. The API's `main.ts` parses configuration and starts the server, which creates resources and passes dependencies to `createApp`, auth, and feature services. The worker follows the same pattern. Shutdown handlers drain the HTTP server/database pool or worker. Startup and failure messages use the standard console. The frontend uses plain English text and a theme selector.
+
+`pnpm check:boundaries` uses Oxlint to reject undeclared workspace imports, application imports, and server dependencies in browser packages. The API client has one explicit exception: a type-only import of `@repo/api/types` for Hono RPC inference. Schema foundations cannot depend on other workspace packages. Always use public exports for cross-package dependencies.
+
+## Schema-first feature development
+
+1. Define the public request and response schemas under `packages/contracts/src/<feature>.ts`.
+2. Infer types from the schema. Distinguish raw schema input from normalized output when transformations are involved.
+3. Validate requests in the API router and pass parsed values to the feature service.
+4. Select public fields explicitly and serialize database dates to ISO strings in responses. Keep database records and auth session users separate from public DTOs.
+5. Reuse request validation in the frontend feature; show validation messages.
+6. Use Hono RPC inference in the client instead of copying request interfaces. Validate custom response payloads at the client boundary.
+
+The profile feature demonstrates the full flow. Omitting `image` preserves the stored image; an empty string or `null` clears it. Profile responses and user-list responses preserve nullable roles. Better Auth remains the owner of auth session types and sign-in/sign-up behavior.
+
+API features live in `apps/api/src/modules`. Frontend features live in `apps/web/src/features`; route files compose them. Authentication owns session queries and sign-in/sign-out. Profile owns profile mutations. Cache keys live in `query-keys.ts`; `schema.ts` names are reserved for schemas.
+
+## Setup and development
 
 ```sh
 pnpm install
 cp .env.example .env
 docker compose -f docker-compose.dev.yaml up -d
 pnpm db:migrate
+pnpm dev
 ```
 
-## Development
+`pnpm dev` starts API, web, and worker. Run an individual application with:
 
 ```sh
 pnpm --filter @repo/api dev
-pnpm --filter @repo/platform dev
+pnpm --filter @repo/web dev
 pnpm --filter @repo/worker dev
 ```
 
-## Tests
+Local services:
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:8000/health`
+- PostgreSQL: `localhost:15432`
+- Redis: `localhost:16379`
+
+Application configuration lives in each application's `src/config.ts`. The root `.env` is loaded by API/worker scripts and Vite. `pnpm check:env` checks `.env.example` against the application schemas and Compose variable names. Add new environment variables to both the owning schema and the example file.
+
+## Validation
 
 ```sh
+pnpm check
+pnpm typecheck
 pnpm test
+pnpm build
 ```
 
-This runs the Vitest suites for API, Platform, and Worker.
+`check` runs package boundary validation, environment documentation validation, Oxlint, and Oxfmt. `check:fix` applies lint fixes and formatting. `build` produces the web bundle; the API and worker execute TypeScript directly with `tsx` and are validated through `typecheck`.
 
-The API database integration tests use an in-memory PostgreSQL instance through PGlite; they do not connect to the configured database.
+Tests cover shared contracts/configuration, API routing, database/auth integration, web configuration, and worker payload validation. Database integration tests apply committed migrations to PGlite and inject that database into auth and services; no configured PostgreSQL connection is required.
 
-## Linting and formatting
-
-Oxlint and Oxfmt are installed at the workspace root. Run both checks with `pnpm check`, lint with `pnpm lint`, and format with `pnpm format`. `pnpm check:fix` applies lint fixes and formatting, while `pnpm format:check` checks formatting without writing files.
-
-Generated files and database migration artifacts are excluded from formatting. The shared UI component library retains its existing lint exclusion. The existing profile editor and mobile hook opt out of `react/set-state-in-effect` while other React checks remain enabled.
+Generated route files and database migration artifacts are excluded from formatting. Existing third-party UI components retain their regular lint exclusion, but package boundary checks include them.
 
 ## Database
 
-The API uses Drizzle ORM with the `pg` driver. Tables are defined in `packages/db/src/schema.ts`, and SQL migrations and schema snapshots are committed under `packages/db/drizzle`.
-
-`@repo/db` exports `createDatabase(connectionString)`, which returns a Drizzle client and its PostgreSQL pool. Import tables from `@repo/db/schema`. The API configures its instance in `apps/api/src/database.ts`; database tooling lives in `packages/db` and loads the root `.env`.
-
-After changing the schema, generate and review a migration, then apply it:
+Persistence tables are defined in `packages/db/src/schema.ts`. SQL migrations and schema snapshots are committed in `packages/db/drizzle`.
 
 ```sh
-pnpm db:generate
-pnpm db:migrate
+pnpm db:generate  # Generate a migration after changing the persistence schema
+pnpm db:migrate   # Apply committed migrations
+pnpm db:studio
 ```
 
-`pnpm db:deploy` also applies committed migrations and is used by the API container at startup. `pnpm db:push` synchronizes a local development database directly, and `pnpm db:studio` opens Drizzle Studio. No client generation step is needed.
+Review generated SQL before applying it. `pnpm db:deploy` applies migrations during container startup; `pnpm db:push` synchronizes a disposable local database directly. Prefer migrations for a database you intend to keep.
 
-### Existing databases
+`createDatabase(connectionString)` returns `{ db, pool }`. Runtime composition owns the instance and closes the pool. Import persistence tables from `@repo/db/schema`; public API schemas belong in `@repo/contracts`.
 
-The schema keeps the existing `User`, `Session`, `Account`, and `Verification` tables, including their column names, timestamp precision, indexes, and cascading foreign keys. An existing database created with the former ORM or `db:push` needs the initial migration recorded in Drizzle's migration ledger before running `db:migrate` or `db:deploy`.
+## Authentication and API client
 
-First verify that the database matches `packages/db/drizzle/0000_init.sql`. Only for a database that already has that complete schema, execute this SQL once to baseline it without recreating tables or changing application data:
+Better Auth is mounted at `/api/auth/*`; custom routes include `/session`, `/profile`, and `/users`. Session loading runs only for routes that need it; `/health` does not perform an auth lookup.
 
-```sql
-BEGIN;
-CREATE SCHEMA IF NOT EXISTS drizzle;
-CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
-  id SERIAL PRIMARY KEY,
-  hash TEXT NOT NULL,
-  created_at BIGINT
-);
-INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
-SELECT
-  '8b8dfd84dfcae1bcb63f573bde02b2a1020dd36c4158bf71b3a5f0a5108a4474',
-  1791032602935
-WHERE NOT EXISTS (
-  SELECT 1 FROM drizzle.__drizzle_migrations
-  WHERE created_at >= 1791032602935
-);
-COMMIT;
-```
+Use Better Auth client methods for sign-in, sign-up, and sign-out, and `createApiClient()` from `@repo/api-client` for custom routes. The web app configures both clients in `src/api.ts` using validated `VITE_API_URL`.
 
-The hash and timestamp identify the committed `0000_init` migration. Fresh databases should use `pnpm db:migrate` directly.
-
-## Auth and API Client
-
-The API uses Better Auth for email/password auth, session cookies, and admin roles. Better Auth is mounted at `/api/auth/*`; custom API routes use Hono RPC types through `packages/api-client`.
-
-Frontend apps should use:
-
-- Better Auth client methods for sign-in, sign-up, and sign-out.
-- `createApiClient()` from `@repo/api-client` for typed API routes such as `/session` and `/users`.
-
-Configure auth with `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `CLIENT_ORIGINS` in `.env`.
-Use a unique `BETTER_AUTH_SECRET`; production environments reject the default value and secrets
-shorter than 32 characters.
-
-Create or promote an admin user:
+Configure `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `CLIENT_ORIGINS`. Production rejects the development secret and secrets shorter than 32 characters. Allowed origins must be comma-separated HTTP(S) origins without paths.
 
 ```sh
 pnpm createsuperuser
 ```
 
+## Queue jobs
+
+Queue names, payload schemas, and result schemas live in `@repo/contracts/jobs`. The producer validates payloads before enqueueing, and the worker validates Redis job data before processing it.
+
+```ts
+import { createExampleQueue, createQueueConnection } from "@repo/queue";
+
+const queue = createExampleQueue(createQueueConnection(redisUrl));
+try {
+  await queue.add({ message: "hello" });
+} finally {
+  await queue.close();
+}
+```
+
+Processors live in `apps/worker/src/processors`. The worker owns logging, event handlers, and shutdown; queue factories do not parse environment variables or start workers.
+
 ## Storage
 
-`packages/storage` exports S3-compatible helpers for AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces, and similar providers.
+`@repo/storage` provides S3-compatible primitives. It is not wired into an application by default. When adding uploads, define storage environment fields in that application and pass its validated configuration to `createStorage`.
 
 ```ts
 import { createStorage } from "@repo/storage";
@@ -122,101 +138,28 @@ const storage = createStorage({
   region: "ap-southeast-1",
   secretAccessKey: "secret-key",
 });
-
-await storage.putObject({
-  key: "uploads/example.txt",
-  body: "hello",
-  contentType: "text/plain",
-});
+await storage.putObject({ key: "uploads/example.txt", body: "hello", contentType: "text/plain" });
 ```
-
-Configure it with `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and optional endpoint/path-style/public URL variables in `.env`.
-
-## Logging
-
-`packages/logger` exports Pino helpers for structured JSON logs.
-
-```ts
-import { createLogger } from "@repo/logger";
-import { loggerConfig } from "./config";
-
-const logger = createLogger({
-  ...loggerConfig,
-  service: "api",
-});
-
-logger.info({ userId: "user_123" }, "User signed in");
-```
-
-Trace-aware helpers use OpenTelemetry-compatible `trace_id`, `span_id`, and `trace_flags` fields. When telemetry is enabled, active span context is attached to Pino logs automatically.
-
-## Telemetry
-
-`packages/logger/telemetry` starts the OpenTelemetry Node SDK before API and worker modules load, so auto-instrumentation can patch supported Node libraries.
-
-Telemetry is disabled by default. For local span output:
-
-```sh
-ENABLE_TELEMETRY=true
-TELEMETRY_EXPORTER=console
-```
-
-For an OTLP HTTP collector:
-
-```sh
-ENABLE_TELEMETRY=true
-TELEMETRY_EXPORTER=otlp
-TELEMETRY_EXPORTER_OTLP_ENDPOINT="https://collector.example.com/v1/traces"
-TELEMETRY_API_KEY="..."
-TELEMETRY_API_KEY_HEADER="authorization"
-```
-
-If `TELEMETRY_API_KEY_HEADER` is `authorization`, the exporter sends `Authorization: Bearer <key>`. Other header names send the raw key value, which fits providers that expect headers such as `x-honeycomb-team`.
 
 ## Docker
 
 ```sh
 cp .env.example .env
-# Set BETTER_AUTH_SECRET in .env, for example:
+# Put a unique BETTER_AUTH_SECRET in .env, for example from:
 openssl rand -base64 32
 docker compose up --build
 ```
 
-The production Compose file builds only the API application and its Postgres database. The API is available at `http://localhost:8000` by default; override `API_HOST_PORT` when another host port is required.
+Production Compose runs the API and PostgreSQL, applies committed migrations, and exposes the API on port 8000. Override `API_HOST_PORT` to change the host port. The worker runs separately; development Compose supplies Redis.
 
-The API container runs Drizzle migrations with `pnpm db:deploy` on startup. For an existing database, follow the baseline procedure above before starting the container.
+## Cloudflare web deployment
 
-For local development, `docker-compose.dev.yaml` still provides Postgres and Redis while the API, worker, and platform run directly through pnpm:
-
-- API health: `http://localhost:8000/health`
-- Postgres with `docker-compose.dev.yaml`: `localhost:15432`
-- Redis with `docker-compose.dev.yaml`: `localhost:16379`
-
-## Cloudflare frontend deployment
-
-Platform deploys as a Cloudflare Worker with static assets. Its Wrangler configuration enables SPA fallback routing and preserves the security and immutable asset-cache headers previously supplied by Caddy.
-
-Authenticate Wrangler once:
+The web application deploys as a Cloudflare Worker with static assets and SPA fallback.
 
 ```sh
-pnpm --filter @repo/platform exec wrangler login
+pnpm --filter @repo/web exec wrangler login
+pnpm --filter @repo/web preview:cloudflare
+VITE_API_URL="https://api.example.com" pnpm deploy:web
 ```
 
-Preview the production build through the local Workers runtime:
-
-```sh
-pnpm --filter @repo/platform preview:cloudflare
-```
-
-Set the public API URL at build time and deploy the frontend:
-
-```sh
-VITE_API_URL="https://api.example.com" pnpm deploy:platform
-```
-
-The deployment uses the Worker name `monorepo-template-platform`. Configure its custom domain in Cloudflare, then allow that origin in the API environment:
-
-```env
-BETTER_AUTH_URL="https://api.example.com"
-CLIENT_ORIGINS="https://app.example.com"
-```
+The Worker name is `monorepo-template-web`. Configure its custom domain in Cloudflare, then set `BETTER_AUTH_URL=https://api.example.com` and `CLIENT_ORIGINS=https://app.example.com` in the API environment.

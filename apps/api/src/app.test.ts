@@ -1,27 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { app } from "./app";
+import { createDatabase } from "@repo/db";
+import { createApp } from "./app";
 
-const mocks = vi.hoisted(() => ({
-  authHandler: vi.fn(),
-  databaseQuery: vi.fn(),
-  getSession: vi.fn(),
-}));
-
-vi.mock("./modules/auth/auth", () => ({
-  auth: {
-    api: {
-      getSession: mocks.getSession,
-    },
-    handler: mocks.authHandler,
-  },
-}));
-
-vi.mock("./database", async () => {
-  const { createDatabase } = await import("@repo/db");
-  const { db, pool } = createDatabase("postgresql://localhost/test");
-  pool.query = mocks.databaseQuery;
-
-  return { db };
+const mocks = { authHandler: vi.fn(), databaseQuery: vi.fn(), getSession: vi.fn() };
+// The pool is lazy; replacing query prevents any network connection.
+const database = createDatabase("postgresql://localhost/test");
+database.pool.query = mocks.databaseQuery;
+const app = createApp({
+  auth: { getSession: mocks.getSession, handler: mocks.authHandler },
+  db: database.db,
+  config: { clientOrigins: ["http://localhost:3000"] },
 });
 
 const baseDate = new Date("2026-07-03T00:00:00.000Z");
@@ -46,6 +34,7 @@ describe("api app", () => {
       service: "api",
     });
     expect(response.status).toBe(200);
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   it("returns unauthorized when a session is missing", async () => {
@@ -91,7 +80,7 @@ describe("api app", () => {
           email: "user-2@example.com",
           id: "user-2",
           name: "User user-2",
-          role: "user",
+          role: null,
           updatedAt: baseDate.toISOString(),
         },
       ],
@@ -200,6 +189,29 @@ describe("api app", () => {
 
     expect(response.status).toBe(400);
     expect(mocks.databaseQuery).not.toHaveBeenCalled();
+  });
+
+  it("returns a contract validation error for malformed avatar URLs", async () => {
+    mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    const response = await app.request("/profile", {
+      body: JSON.stringify({ name: "User", image: "invalid" }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "validation_error" });
+    expect(mocks.databaseQuery).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when the session user's record no longer exists", async () => {
+    mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    const response = await app.request("/profile", {
+      body: JSON.stringify({ name: "User" }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "user_not_found" });
   });
 
   it("ignores profile fields users are not allowed to change", async () => {

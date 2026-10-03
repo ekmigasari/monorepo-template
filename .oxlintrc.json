@@ -6,7 +6,7 @@
   },
   "overrides": [
     {
-      "files": ["apps/platform/src/routes/profile.tsx", "packages/ui/src/hooks/use-mobile.ts"],
+      "files": ["packages/ui/src/hooks/use-mobile.ts"],
       "rules": {
         "react/set-state-in-effect": "off"
       }

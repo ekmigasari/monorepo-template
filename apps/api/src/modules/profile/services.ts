@@ -1,34 +1,49 @@
 import { eq } from "drizzle-orm";
-import { db } from "../../database";
+import type { Database } from "@repo/db";
 import { user as userTable } from "@repo/db/schema";
-import type { UpdateProfileInput } from "./schema";
-import type { ProfileResponse } from "./types";
+import type { ProfileResponse, UpdateProfileInput } from "@repo/contracts/profile";
 
-export async function updateProfile(
-  userId: string,
-  input: UpdateProfileInput,
-): Promise<ProfileResponse> {
-  const [user] = await db
-    .update(userTable)
-    .set({
-      ...(input.image !== undefined ? { image: input.image } : {}),
-      name: input.name,
-    })
-    .where(eq(userTable.id, userId))
-    .returning({
-      createdAt: userTable.createdAt,
-      email: userTable.email,
-      emailVerified: userTable.emailVerified,
-      id: userTable.id,
-      image: userTable.image,
-      name: userTable.name,
-      role: userTable.role,
-      updatedAt: userTable.updatedAt,
-    });
-
-  if (!user) {
-    throw new Error("User not found.");
+export class ProfileNotFoundError extends Error {
+  constructor() {
+    super("User not found.");
+    this.name = "ProfileNotFoundError";
   }
+}
 
-  return { user };
+export function createProfileService(db: Pick<Database, "update">) {
+  return { updateProfile };
+  async function updateProfile(
+    userId: string,
+    input: UpdateProfileInput,
+  ): Promise<ProfileResponse> {
+    const [user] = await db
+      .update(userTable)
+      .set({
+        ...(input.image !== undefined ? { image: input.image } : {}),
+        name: input.name,
+      })
+      .where(eq(userTable.id, userId))
+      .returning({
+        createdAt: userTable.createdAt,
+        email: userTable.email,
+        emailVerified: userTable.emailVerified,
+        id: userTable.id,
+        image: userTable.image,
+        name: userTable.name,
+        role: userTable.role,
+        updatedAt: userTable.updatedAt,
+      });
+
+    if (!user) {
+      throw new ProfileNotFoundError();
+    }
+
+    return {
+      user: {
+        ...user,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+      },
+    };
+  }
 }

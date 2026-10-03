@@ -1,5 +1,7 @@
 import { hc } from "hono/client";
-import type { AppType } from "@repo/api";
+import type { AppType } from "@repo/api/types";
+import type { InferRequestType, InferResponseType } from "hono/client";
+import { profileResponseSchema } from "@repo/contracts/profile";
 
 export function createApiClient(baseUrl: string) {
   return hc<AppType>(baseUrl, {
@@ -11,10 +13,8 @@ export function createApiClient(baseUrl: string) {
 
 export type ApiClient = ReturnType<typeof createApiClient>;
 
-export type UpdateProfileInput = {
-  image?: string | null;
-  name: string;
-};
+export type UpdateProfileInput = InferRequestType<ApiClient["profile"]["$patch"]>["json"];
+export type SessionUser = InferResponseType<ApiClient["session"]["$get"], 200>["user"];
 
 export class UnauthorizedApiError extends Error {
   constructor() {
@@ -52,7 +52,7 @@ export async function updateCurrentUserProfile(client: ApiClient, input: UpdateP
     throw new Error("Failed to update profile.");
   }
 
-  const data = await response.json();
+  const data = profileResponseSchema.parse(await response.json());
 
   return data.user;
 }

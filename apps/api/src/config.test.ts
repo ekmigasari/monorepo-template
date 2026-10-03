@@ -35,4 +35,15 @@ describe("API environment config", () => {
       }),
     ).not.toThrow();
   });
+  it("rejects paths and empty entries in allowed origins", () => {
+    for (const CLIENT_ORIGINS of ["https://app.example.com/path", "https://app.example.com,", ""]) {
+      expect(() => parseApiEnv({ CLIENT_ORIGINS })).toThrow();
+    }
+  });
+  it("normalizes allowed origins once", () => {
+    expect(
+      parseApiEnv({ CLIENT_ORIGINS: "https://app.example.com, http://localhost:3000" })
+        .CLIENT_ORIGINS,
+    ).toEqual(["https://app.example.com", "http://localhost:3000"]);
+  });
 });

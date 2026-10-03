@@ -20,7 +20,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1146.0"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
-    "typescript": "^7.0.2"
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
   }
 }

@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
-    "deploy:platform": "pnpm --filter @repo/platform deploy",
+    "deploy:web": "pnpm --filter @repo/web deploy",
     "build": "pnpm --filter './apps/*' build",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r typecheck",
-    "check": "pnpm lint && pnpm format:check",
+    "check": "pnpm check:boundaries && pnpm check:env && pnpm lint && pnpm format:check",
     "check:fix": "pnpm lint:fix && pnpm format",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
@@ -21,14 +21,16 @@
     "db:deploy": "pnpm --filter @repo/db db:deploy",
     "db:migrate": "pnpm --filter @repo/db db:migrate",
     "db:push": "pnpm --filter @repo/db db:push",
-    "db:studio": "pnpm --filter @repo/db db:studio"
+    "db:studio": "pnpm --filter @repo/db db:studio",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:env": "tsx scripts/check-env.ts"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",
     "oxfmt": "^0.71.0",
     "oxlint": "^1.86.0",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
     "vitest": "^5.0.3"
   },
   "packageManager": "pnpm@10.30.3"

@@ -1,12 +1,11 @@
 import { defineConfig } from "drizzle-kit";
+import { databaseUrlSchema } from "@repo/config/database";
 
 export default defineConfig({
   dialect: "postgresql",
   schema: "./src/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url:
-      process.env.DATABASE_URL ??
-      "postgresql://postgres:postgres@localhost:15432/monorepo_template",
+    url: databaseUrlSchema.parse(process.env.DATABASE_URL),
   },
 });

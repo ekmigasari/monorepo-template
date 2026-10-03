@@ -1,9 +1,14 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { eq } from "drizzle-orm";
-import { auth } from "../src/modules/auth/auth";
-import { db, pool } from "../src/database";
+import { createAuth } from "../src/modules/auth/auth";
+import { createDatabase } from "@repo/db";
+import { createApiConfig, parseApiEnv } from "../src/config";
 import { user as userTable } from "@repo/db/schema";
+
+const config = createApiConfig(parseApiEnv(process.env));
+const { db, pool } = createDatabase(config.databaseUrl);
+const auth = createAuth(db, config.auth);
 
 const rl = createInterface({ input, output });
 

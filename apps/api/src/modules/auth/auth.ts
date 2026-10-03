@@ -2,8 +2,8 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins";
 import { betterAuthConfig } from "../../config";
-import { db } from "../../db";
-import * as schema from "../../db/schema";
+import { db } from "../../database";
+import * as schema from "@repo/db/schema";
 
 export const auth = betterAuth({
   appName: "Monorepo Template",

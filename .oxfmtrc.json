@@ -13,7 +13,7 @@
     "**/.turbo/**",
     "**/.tanstack/**",
     "**/routeTree.gen.ts",
-    "apps/api/drizzle/**",
+    "packages/db/drizzle/**",
     "pnpm-lock.yaml"
   ]
 }

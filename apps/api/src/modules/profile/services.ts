@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { db } from "../../db";
-import { user as userTable } from "../../db/schema";
+import { db } from "../../database";
+import { user as userTable } from "@repo/db/schema";
 import type { UpdateProfileInput } from "./schema";
 import type { ProfileResponse } from "./types";
 

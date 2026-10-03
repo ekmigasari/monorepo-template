@@ -2,8 +2,8 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { eq } from "drizzle-orm";
 import { auth } from "../src/modules/auth/auth";
-import { db, pool } from "../src/db";
-import { user as userTable } from "../src/db/schema";
+import { db, pool } from "../src/database";
+import { user as userTable } from "@repo/db/schema";
 
 const rl = createInterface({ input, output });
 

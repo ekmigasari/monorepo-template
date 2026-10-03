@@ -40,7 +40,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check database migrations
-        run: pnpm --filter @repo/api exec drizzle-kit check
+        run: pnpm --filter @repo/db exec drizzle-kit check
 
       - name: Check formatting and linting
         run: pnpm check

@@ -16,14 +16,12 @@ vi.mock("./modules/auth/auth", () => ({
   },
 }));
 
-vi.mock("./db", async () => {
-  const { drizzle } = await import("drizzle-orm/node-postgres");
-  const { Pool } = await import("pg");
-  const schema = await import("./db/schema");
-  const client = new Pool();
-  client.query = mocks.databaseQuery;
+vi.mock("./database", async () => {
+  const { createDatabase } = await import("@repo/db");
+  const { db, pool } = createDatabase("postgresql://localhost/test");
+  pool.query = mocks.databaseQuery;
 
-  return { db: drizzle({ client, schema }) };
+  return { db };
 });
 
 const baseDate = new Date("2026-07-03T00:00:00.000Z");

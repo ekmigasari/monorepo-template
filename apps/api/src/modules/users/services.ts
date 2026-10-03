@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, or } from "drizzle-orm";
-import { db } from "../../db";
-import { user } from "../../db/schema";
+import { db } from "../../database";
+import { user } from "@repo/db/schema";
 import type { UsersResponse } from "./types";
 import { usersListDefaultLimit } from "./utils";
 

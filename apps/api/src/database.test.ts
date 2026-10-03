@@ -2,25 +2,25 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { auth } from "../modules/auth/auth";
-import { updateProfile } from "../modules/profile/services";
-import { InvalidUsersCursorError, listRecentUsers } from "../modules/users/services";
-import { account, session, user } from "./schema";
+import { auth } from "./modules/auth/auth";
+import { updateProfile } from "./modules/profile/services";
+import { InvalidUsersCursorError, listRecentUsers } from "./modules/users/services";
+import { account, session, user } from "@repo/db/schema";
 
 const { client, db } = await vi.hoisted(async () => {
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
-  const schema = await import("./schema");
+  const schema = await import("@repo/db/schema");
   const client = new PGlite();
   return { client, db: drizzle({ client, schema }) };
 });
 
-vi.mock("./index", () => ({ db }));
+vi.mock("./database", () => ({ db }));
 
 describe("Drizzle database integration", () => {
   beforeAll(async () => {
     await migrate(db, {
-      migrationsFolder: fileURLToPath(new URL("../../drizzle", import.meta.url)),
+      migrationsFolder: fileURLToPath(new URL("../../../packages/db/drizzle", import.meta.url)),
     });
   });
 

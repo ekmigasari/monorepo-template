@@ -5,6 +5,7 @@ pnpm workspace with:
 - `apps/api`: Hono API on Node.js.
 - `apps/platform`: React + Vite + TanStack Router file routes + TanStack Query.
 - `packages/api-client`: typed Hono RPC client shared by the frontend apps.
+- `packages/db`: shared Drizzle client factory, PostgreSQL schema, and migrations.
 - `packages/logger`: Pino logging and OpenTelemetry setup for server applications.
 - `packages/storage`: S3-compatible object storage primitives.
 - `packages/ui`: shared shadcn components and frontend i18next setup.
@@ -48,7 +49,9 @@ Generated files and database migration artifacts are excluded from formatting. T
 
 ## Database
 
-The API uses Drizzle ORM with the `pg` driver. Tables are defined in `apps/api/src/db/schema.ts`, and SQL migrations and schema snapshots are committed under `apps/api/drizzle`.
+The API uses Drizzle ORM with the `pg` driver. Tables are defined in `packages/db/src/schema.ts`, and SQL migrations and schema snapshots are committed under `packages/db/drizzle`.
+
+`@repo/db` exports `createDatabase(connectionString)`, which returns a Drizzle client and its PostgreSQL pool. Import tables from `@repo/db/schema`. The API configures its instance in `apps/api/src/database.ts`; database tooling lives in `packages/db` and loads the root `.env`.
 
 After changing the schema, generate and review a migration, then apply it:
 
@@ -63,7 +66,7 @@ pnpm db:migrate
 
 The schema keeps the existing `User`, `Session`, `Account`, and `Verification` tables, including their column names, timestamp precision, indexes, and cascading foreign keys. An existing database created with the former ORM or `db:push` needs the initial migration recorded in Drizzle's migration ledger before running `db:migrate` or `db:deploy`.
 
-First verify that the database matches `apps/api/drizzle/0000_init.sql`. Only for a database that already has that complete schema, execute this SQL once to baseline it without recreating tables or changing application data:
+First verify that the database matches `packages/db/drizzle/0000_init.sql`. Only for a database that already has that complete schema, execute this SQL once to baseline it without recreating tables or changing application data:
 
 ```sql
 BEGIN;

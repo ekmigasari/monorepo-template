@@ -17,11 +17,11 @@
     "lint:fix": "oxlint --fix --deny-warnings .",
     "with-env": "dotenv -e .env --",
     "createsuperuser": "pnpm --filter @repo/api createsuperuser",
-    "db:generate": "pnpm --filter @repo/api db:generate",
-    "db:deploy": "pnpm --filter @repo/api db:deploy",
-    "db:migrate": "pnpm --filter @repo/api db:migrate",
-    "db:push": "pnpm --filter @repo/api db:push",
-    "db:studio": "pnpm --filter @repo/api db:studio"
+    "db:generate": "pnpm --filter @repo/db db:generate",
+    "db:deploy": "pnpm --filter @repo/db db:deploy",
+    "db:migrate": "pnpm --filter @repo/db db:migrate",
+    "db:push": "pnpm --filter @repo/db db:push",
+    "db:studio": "pnpm --filter @repo/db db:studio"
   },
   "devDependencies": {
     "dotenv-cli": "^11.0.0",

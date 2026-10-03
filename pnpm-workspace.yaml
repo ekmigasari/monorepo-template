@@ -2,11 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
 
+overrides:
+  # Better Auth bundles this adapter, but the API uses Drizzle.
+  "better-auth>@better-auth/prisma-adapter": "-"
+
 onlyBuiltDependencies:
-  - "@prisma/client"
-  - "@prisma/engines"
   - "esbuild"
   - "msgpackr-extract"
-  - "prisma"
   - "protobufjs"
   - "workerd"

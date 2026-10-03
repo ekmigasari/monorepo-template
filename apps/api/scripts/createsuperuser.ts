@@ -1,7 +1,9 @@
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { auth } from "../apps/api/src/modules/auth/auth";
-import { prisma } from "../apps/api/src/utils/prisma";
+import { eq } from "drizzle-orm";
+import { auth } from "../src/modules/auth/auth";
+import { db, pool } from "../src/db";
+import { user as userTable } from "../src/db/schema";
 
 const rl = createInterface({ input, output });
 
@@ -23,16 +25,25 @@ try {
     throw new Error("Passwords do not match.");
   }
 
-  const existingUser = await prisma.user.findUnique({ where: { email } });
+  const [existingUser] = await db
+    .select({ id: userTable.id })
+    .from(userTable)
+    .where(eq(userTable.email, email))
+    .limit(1);
 
   if (existingUser) {
-    const user = await prisma.user.update({
-      where: { id: existingUser.id },
-      data: {
+    const [user] = await db
+      .update(userTable)
+      .set({
         ...(name ? { name } : {}),
         role: "admin",
-      },
-    });
+      })
+      .where(eq(userTable.id, existingUser.id))
+      .returning({ email: userTable.email });
+
+    if (!user) {
+      throw new Error("User no longer exists.");
+    }
 
     output.write(`Admin user ready: ${user.email}. Existing password was not changed.\n`);
   } else {
@@ -53,7 +64,7 @@ try {
   process.exitCode = 1;
 } finally {
   rl.close();
-  await prisma.$disconnect();
+  await pool.end();
 }
 
 function normalizeEmail(email: string) {

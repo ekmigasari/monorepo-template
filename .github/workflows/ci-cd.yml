@@ -39,8 +39,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
-        run: pnpm --filter @repo/api exec prisma generate
+      - name: Check database migrations
+        run: pnpm --filter @repo/api exec drizzle-kit check
 
       - name: Check formatting and linting
         run: pnpm check

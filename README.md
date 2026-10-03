@@ -20,7 +20,6 @@ Runtime-specific environment validation lives with the API and worker that consu
 pnpm install
 cp .env.example .env
 docker compose -f docker-compose.dev.yaml up -d
-pnpm db:generate
 pnpm db:migrate
 ```
 
@@ -40,6 +39,48 @@ pnpm test
 ```
 
 This runs the base Vitest suites for API, Platform, Admin, and Worker.
+
+The API database integration tests use an in-memory PostgreSQL instance through PGlite; they do not connect to the configured database.
+
+## Database
+
+The API uses Drizzle ORM with the `pg` driver. Tables are defined in `apps/api/src/db/schema.ts`, and SQL migrations and schema snapshots are committed under `apps/api/drizzle`.
+
+After changing the schema, generate and review a migration, then apply it:
+
+```sh
+pnpm db:generate
+pnpm db:migrate
+```
+
+`pnpm db:deploy` also applies committed migrations and is used by the API container at startup. `pnpm db:push` synchronizes a local development database directly, and `pnpm db:studio` opens Drizzle Studio. No client generation step is needed.
+
+### Existing databases
+
+The schema keeps the existing `User`, `Session`, `Account`, and `Verification` tables, including their column names, timestamp precision, indexes, and cascading foreign keys. An existing database created with the former ORM or `db:push` needs the initial migration recorded in Drizzle's migration ledger before running `db:migrate` or `db:deploy`.
+
+First verify that the database matches `apps/api/drizzle/0000_init.sql`. Only for a database that already has that complete schema, execute this SQL once to baseline it without recreating tables or changing application data:
+
+```sql
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS drizzle;
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
+  id SERIAL PRIMARY KEY,
+  hash TEXT NOT NULL,
+  created_at BIGINT
+);
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+SELECT
+  '8b8dfd84dfcae1bcb63f573bde02b2a1020dd36c4158bf71b3a5f0a5108a4474',
+  1791032602935
+WHERE NOT EXISTS (
+  SELECT 1 FROM drizzle.__drizzle_migrations
+  WHERE created_at >= 1791032602935
+);
+COMMIT;
+```
+
+The hash and timestamp identify the committed `0000_init` migration. Fresh databases should use `pnpm db:migrate` directly.
 
 ## Auth and API Client
 
@@ -136,7 +177,7 @@ docker compose up --build
 
 The production Compose file builds only the API application and its Postgres database. The API is available at `http://localhost:8000` by default; override `API_HOST_PORT` when another host port is required.
 
-The API container runs Prisma migrations with `pnpm db:deploy` on startup. If you already created a local Compose database with the older `db:push` flow, reset the local volume or baseline the database before switching to migrations.
+The API container runs Drizzle migrations with `pnpm db:deploy` on startup. For an existing database, follow the baseline procedure above before starting the container.
 
 For local development, `docker-compose.dev.yaml` still provides Postgres and Redis while the API, worker, and frontends run directly through pnpm:
 

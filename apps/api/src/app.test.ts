@@ -3,10 +3,8 @@ import { app } from "./app";
 
 const mocks = vi.hoisted(() => ({
   authHandler: vi.fn(),
-  findMany: vi.fn(),
-  findUnique: vi.fn(),
+  databaseQuery: vi.fn(),
   getSession: vi.fn(),
-  update: vi.fn(),
 }));
 
 vi.mock("./modules/auth/auth", () => ({
@@ -18,42 +16,28 @@ vi.mock("./modules/auth/auth", () => ({
   },
 }));
 
-vi.mock("./utils/prisma", () => ({
-  prisma: {
-    user: {
-      findMany: mocks.findMany,
-      findUnique: mocks.findUnique,
-      update: mocks.update,
-    },
-  },
-}));
+vi.mock("./db", async () => {
+  const { drizzle } = await import("drizzle-orm/node-postgres");
+  const { Pool } = await import("pg");
+  const schema = await import("./db/schema");
+  const client = new Pool();
+  client.query = mocks.databaseQuery;
+
+  return { db: drizzle({ client, schema }) };
+});
 
 const baseDate = new Date("2026-07-03T00:00:00.000Z");
+const databaseTimestamp = "2026-07-03 00:00:00.000";
 
 describe("api app", () => {
   beforeEach(() => {
     mocks.authHandler.mockReset();
-    mocks.findMany.mockReset();
-    mocks.findUnique.mockReset();
+    mocks.databaseQuery.mockReset();
     mocks.getSession.mockReset();
-    mocks.update.mockReset();
 
     mocks.authHandler.mockResolvedValue(new Response(null, { status: 404 }));
-    mocks.findMany.mockResolvedValue([]);
-    mocks.findUnique.mockResolvedValue(null);
+    mocks.databaseQuery.mockResolvedValue({ rows: [] });
     mocks.getSession.mockResolvedValue(null);
-    mocks.update.mockImplementation(({ data, where }) =>
-      Promise.resolve({
-        createdAt: baseDate,
-        email: `${where.id}@example.com`,
-        emailVerified: true,
-        id: where.id,
-        image: data.image ?? "https://example.com/avatar.png",
-        name: data.name,
-        role: "user",
-        updatedAt: baseDate,
-      }),
-    );
   });
 
   it("returns health status", async () => {
@@ -78,7 +62,7 @@ describe("api app", () => {
 
     await expect(response.json()).resolves.toEqual({ error: "forbidden" });
     expect(response.status).toBe(403);
-    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.databaseQuery).not.toHaveBeenCalled();
   });
 
   it("validates users list limits", async () => {
@@ -87,15 +71,17 @@ describe("api app", () => {
     const response = await app.request("/users?limit=0");
 
     expect(response.status).toBe(400);
-    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.databaseQuery).not.toHaveBeenCalled();
   });
 
   it("returns paginated users for admins", async () => {
     mocks.getSession.mockResolvedValue(createAuthSession("admin"));
-    mocks.findMany.mockResolvedValue([
-      createUser({ id: "user-2", role: null }),
-      createUser({ id: "user-1", role: "admin" }),
-    ]);
+    mocks.databaseQuery.mockResolvedValue({
+      rows: [
+        createUserRow({ id: "user-2", role: null }),
+        createUserRow({ id: "user-1", role: "admin" }),
+      ],
+    });
 
     const response = await app.request("/users?limit=1");
 
@@ -114,20 +100,20 @@ describe("api app", () => {
     });
     expect(response.status).toBe(200);
 
-    const query = mocks.findMany.mock.calls[0]?.[0];
-    expect(query.take).toBe(2);
-    expect(query.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+    const [query, parameters] = mocks.databaseQuery.mock.calls[0] ?? [];
+    expect(parameters).toEqual([2]);
+    expect(query.text).toContain('order by "User"."createdAt" desc, "User"."id" desc');
   });
 
   it("returns invalid_cursor for missing user cursors", async () => {
     mocks.getSession.mockResolvedValue(createAuthSession("admin"));
-    mocks.findUnique.mockResolvedValue(null);
 
     const response = await app.request("/users?cursor=missing");
 
     await expect(response.json()).resolves.toEqual({ error: "invalid_cursor" });
     expect(response.status).toBe(400);
-    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.databaseQuery).toHaveBeenCalledTimes(1);
+    expect(mocks.databaseQuery.mock.calls[0]?.[1]).toEqual(["missing", 1]);
   });
 
   it("requires a session to update profile", async () => {
@@ -139,11 +125,14 @@ describe("api app", () => {
 
     await expect(response.json()).resolves.toEqual({ error: "unauthorized" });
     expect(response.status).toBe(401);
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.databaseQuery).not.toHaveBeenCalled();
   });
 
   it("updates the current user's profile", async () => {
     mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    mocks.databaseQuery.mockResolvedValue({
+      rows: [createProfileRow("https://example.com/new-avatar.png")],
+    });
 
     const response = await app.request("/profile", {
       body: JSON.stringify({
@@ -167,27 +156,18 @@ describe("api app", () => {
       },
     });
     expect(response.status).toBe(200);
-    expect(mocks.update).toHaveBeenCalledWith({
-      data: {
-        image: "https://example.com/new-avatar.png",
-        name: "Updated User",
-      },
-      select: {
-        createdAt: true,
-        email: true,
-        emailVerified: true,
-        id: true,
-        image: true,
-        name: true,
-        role: true,
-        updatedAt: true,
-      },
-      where: { id: "auth-user-id" },
-    });
+    expect(mocks.databaseQuery.mock.calls[0]?.[1]).toEqual([
+      "Updated User",
+      "https://example.com/new-avatar.png",
+      expect.any(String),
+      "auth-user-id",
+    ]);
+    expect(mocks.databaseQuery.mock.calls[0]?.[0].text).toContain('where "User"."id" = $4');
   });
 
   it("converts an empty profile image to null", async () => {
     mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    mocks.databaseQuery.mockResolvedValue({ rows: [createProfileRow(null)] });
 
     const response = await app.request("/profile", {
       body: JSON.stringify({
@@ -199,10 +179,13 @@ describe("api app", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mocks.update.mock.calls[0]?.[0].data).toEqual({
-      image: null,
-      name: "Updated User",
-    });
+    expect(mocks.databaseQuery.mock.calls[0]?.[1]).toEqual([
+      "Updated User",
+      null,
+      expect.any(String),
+      "auth-user-id",
+    ]);
+    await expect(response.json()).resolves.toMatchObject({ user: { image: null } });
   });
 
   it("rejects invalid profile input", async () => {
@@ -218,11 +201,12 @@ describe("api app", () => {
     });
 
     expect(response.status).toBe(400);
-    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.databaseQuery).not.toHaveBeenCalled();
   });
 
   it("ignores profile fields users are not allowed to change", async () => {
     mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    mocks.databaseQuery.mockResolvedValue({ rows: [createProfileRow(null)] });
 
     const response = await app.request("/profile", {
       body: JSON.stringify({
@@ -236,10 +220,66 @@ describe("api app", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(mocks.update.mock.calls[0]?.[0].data).toEqual({
-      image: null,
-      name: "Updated User",
+    expect(mocks.databaseQuery.mock.calls[0]?.[1]).toEqual([
+      "Updated User",
+      null,
+      expect.any(String),
+      "auth-user-id",
+    ]);
+    const query = mocks.databaseQuery.mock.calls[0]?.[0].text;
+    const assignments = query.split(" returning ")[0];
+    expect(assignments).not.toContain('"email" =');
+    expect(assignments).not.toContain('"role" =');
+  });
+
+  it("keeps pagination stable when users share a creation timestamp", async () => {
+    mocks.getSession.mockResolvedValue(createAuthSession("admin"));
+    mocks.databaseQuery
+      .mockResolvedValueOnce({ rows: [[databaseTimestamp, "user-2"]] })
+      .mockResolvedValueOnce({ rows: [createUserRow({ id: "user-1", role: "user" })] });
+
+    const response = await app.request("/users?cursor=user-2&limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      users: [{ id: "user-1" }],
+      nextCursor: null,
     });
+    expect(mocks.databaseQuery.mock.calls[1]?.[1]).toEqual([
+      baseDate.toISOString(),
+      baseDate.toISOString(),
+      "user-2",
+      2,
+    ]);
+    expect(mocks.databaseQuery.mock.calls[1]?.[0].text).toContain(
+      '("User"."createdAt" < $1 or ("User"."createdAt" = $2 and "User"."id" < $3))',
+    );
+  });
+
+  it("preserves the profile image when the update omits it", async () => {
+    mocks.getSession.mockResolvedValue(createAuthSession("user"));
+    mocks.databaseQuery.mockResolvedValue({
+      rows: [createProfileRow("https://example.com/avatar.png")],
+    });
+
+    const response = await app.request("/profile", {
+      body: JSON.stringify({ name: "Updated User" }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      user: { image: "https://example.com/avatar.png" },
+    });
+    expect(mocks.databaseQuery.mock.calls[0]?.[1]).toEqual([
+      "Updated User",
+      expect.any(String),
+      "auth-user-id",
+    ]);
+    expect(mocks.databaseQuery.mock.calls[0]?.[0].text.split(" returning ")[0]).not.toContain(
+      '"image" =',
+    );
   });
 });
 
@@ -266,28 +306,27 @@ function createAuthSession(role: string) {
   };
 }
 
-function createUser({
+function createUserRow({
   id,
-  image = null,
   name = `User ${id}`,
   role,
 }: {
   id: string;
-  image?: string | null;
   name?: string;
   role: string | null;
 }) {
-  return {
-    banned: null,
-    banExpires: null,
-    banReason: null,
-    createdAt: baseDate,
-    email: `${id}@example.com`,
-    emailVerified: true,
-    id,
+  return [id, `${id}@example.com`, name, role, databaseTimestamp, databaseTimestamp];
+}
+
+function createProfileRow(image: string | null) {
+  return [
+    databaseTimestamp,
+    "auth-user-id@example.com",
+    true,
+    "auth-user-id",
     image,
-    name,
-    role,
-    updatedAt: baseDate,
-  };
+    "Updated User",
+    "user",
+    databaseTimestamp,
+  ];
 }

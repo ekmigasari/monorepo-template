@@ -16,7 +16,7 @@
     "format": "biome format --write .",
     "lint": "biome lint .",
     "with-env": "dotenv -e .env --",
-    "createsuperuser": "pnpm with-env tsx scripts/createsuperuser.ts",
+    "createsuperuser": "pnpm --filter @repo/api createsuperuser",
     "db:generate": "pnpm --filter @repo/api db:generate",
     "db:deploy": "pnpm --filter @repo/api db:deploy",
     "db:migrate": "pnpm --filter @repo/api db:migrate",
@@ -24,10 +24,10 @@
     "db:studio": "pnpm --filter @repo/api db:studio"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.7",
+    "@biomejs/biome": "^2.5.15",
     "dotenv-cli": "^11.0.0",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.3"
   }
 }

@@ -16,7 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "hono": "^4.13.1"
+    "hono": "^4.13.12"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

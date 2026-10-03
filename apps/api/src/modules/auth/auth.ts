@@ -1,14 +1,16 @@
-import { betterAuthConfig } from "../../config";
+import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
-import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins";
-import { prisma } from "../../utils/prisma";
+import { betterAuthConfig } from "../../config";
+import { db } from "../../db";
+import * as schema from "../../db/schema";
 
 export const auth = betterAuth({
   appName: "Monorepo Template",
   baseURL: betterAuthConfig.url,
-  database: prismaAdapter(prisma, {
-    provider: "postgresql",
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema,
   }),
   emailAndPassword: {
     enabled: true,

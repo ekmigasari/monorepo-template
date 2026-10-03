@@ -3,8 +3,7 @@ FROM node:22-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-RUN apk add --no-cache openssl \
-  && corepack enable
+RUN corepack enable
 
 WORKDIR /app
 
@@ -17,7 +16,6 @@ RUN pnpm install --frozen-lockfile
 COPY apps/api apps/api
 COPY packages/logger packages/logger
 
-RUN DATABASE_URL="postgresql://postgres:postgres@postgres:5432/monorepo_template?schema=public" pnpm db:generate
 RUN pnpm --filter @repo/api build
 
 ENV NODE_ENV=production
